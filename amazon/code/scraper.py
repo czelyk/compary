@@ -1,14 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
-import re
 import os
-import sys
 from fake_useragent import UserAgent
-
-def is_amazon_link(url):
-    """Check if the URL is a valid Amazon link."""
-    pattern = r"https?://(?:www\.)?amazon\.(com|co\.[a-z]{2,3}|ca|co\.uk|de|fr|it|es|in|jp|mx|com\.br|com\.au|co\.jp|cn|com\.tr)/"
-    return bool(re.match(pattern, url))
+from utils import is_amazon_link
 
 def scrape_amazon_product(url):
     """Scrape the product title and save it to a file."""
@@ -43,21 +37,21 @@ def scrape_amazon_product(url):
 
     soup = BeautifulSoup(response.content, "html.parser")
 
-    # Try multiple ways to find the product title
-    product_name = soup.find("span", id="productTitle")
-    if not product_name:
-        product_name = soup.find("h1", class_="a-size-large a-spacing-none")  # Alternative selector
+    # Extract the product title from the meta tag
+    meta_title = soup.find("meta", attrs={"name": "title"})
+    if meta_title:
+        product_name = meta_title.get("content")
+    else:
+        product_name = None
 
     if product_name:
-        product_text = product_name.get_text(strip=True)
-
         # Extract first two words for filename
-        words = re.findall(r'\w+', product_text)
+        words = product_name.split()
         filename = "_".join(words[:2]) + ".txt"
 
         file_path = os.path.join(RESULTS_DIR, filename)
 
-        formatted_text = f"Product name: {product_text}"
+        formatted_text = f"Product name: {product_name}"
 
         # Save to file
         with open(file_path, "w", encoding="utf-8") as file:
@@ -66,9 +60,3 @@ def scrape_amazon_product(url):
         print(f"✅ Product name saved successfully: {file_path}")
     else:
         print("Error: Could not find the product title. Amazon may have blocked the request or changed its structure.")
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        scrape_amazon_product(sys.argv[1])  # Get URL from command-line argument
-    else:
-        print("Usage: python scraping.py <Amazon URL>")
