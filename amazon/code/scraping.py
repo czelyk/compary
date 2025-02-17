@@ -13,7 +13,7 @@ def is_amazon_link(url):
 def scrape_amazon_product(url):
     """Scrape the product title and save it to a file."""
     if not is_amazon_link(url):
-        print("Invalid Amazon link.")
+        print("Error: The provided URL is not a valid Amazon link.")
         return
 
     # Define directories
@@ -23,17 +23,30 @@ def scrape_amazon_product(url):
 
     # Get a random user-agent
     ua = UserAgent()
-    headers = {"User-Agent": ua.random}  # Automatically choose a random user-agent
+    headers = {"User-Agent": ua.random}
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()  # Raise an error for failed requests
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed: {e}")
+    except requests.exceptions.Timeout:
+        print("Error: Request timed out. Amazon may be blocking the request.")
+        return
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP Error: {http_err}")
+        return
+    except requests.exceptions.ConnectionError:
+        print("Error: Failed to connect to Amazon. Please check your internet connection.")
+        return
+    except requests.exceptions.RequestException as err:
+        print(f"Error: An unexpected request error occurred: {err}")
         return
 
     soup = BeautifulSoup(response.content, "html.parser")
+
+    # Try multiple ways to find the product title
     product_name = soup.find("span", id="productTitle")
+    if not product_name:
+        product_name = soup.find("h1", class_="a-size-large a-spacing-none")  # Alternative selector
 
     if product_name:
         product_text = product_name.get_text(strip=True)
@@ -50,9 +63,9 @@ def scrape_amazon_product(url):
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(formatted_text)
 
-        print(f"Product name saved to {file_path}")
+        print(f"✅ Product name saved successfully: {file_path}")
     else:
-        print("Product title not found. Amazon may have blocked the request.")
+        print("Error: Could not find the product title. Amazon may have blocked the request or changed its structure.")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
