@@ -1,15 +1,15 @@
 import os
-import time
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
+import ollama
 from utils import is_amazon_link
 
 def scrape_amazon_product(url):
-    """Scrape product details & comments using Selenium."""
+    """Scrape Amazon product details & comments, then summarize using AI."""
     if not is_amazon_link(url):
         print("Error: The provided URL is not a valid Amazon link.")
         return
@@ -17,7 +17,11 @@ def scrape_amazon_product(url):
     # Set up results directory
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     RESULTS_DIR = os.path.join(BASE_DIR, "..", "results")
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    COMMENTS_DIR = os.path.join(RESULTS_DIR, "Comments")
+    AI_SUMMARY_DIR = os.path.join(RESULTS_DIR, "AI Summary")
+
+    os.makedirs(COMMENTS_DIR, exist_ok=True)
+    os.makedirs(AI_SUMMARY_DIR, exist_ok=True)
 
     # Set up Selenium WebDriver
     chrome_options = Options()
@@ -29,7 +33,6 @@ def scrape_amazon_product(url):
 
     try:
         driver.get(url)
-        time.sleep(2)  # Wait for page to load
 
         # Extract product title
         try:
@@ -44,14 +47,6 @@ def scrape_amazon_product(url):
         except:
             star_rating = "N/A"
 
-        # Scroll down to load reviews
-        try:
-            reviews_section = driver.find_element(By.ID, "reviewsMedley")
-            driver.execute_script("arguments[0].scrollIntoView();", reviews_section)
-            time.sleep(2)  # Wait for reviews to load
-        except:
-            print("Reviews section not found, skipping scroll.")
-
         # Extract all comments
         comments = []
         review_elements = driver.find_elements(By.XPATH, "//div[@data-hook='review-collapsed']//span")
@@ -64,8 +59,9 @@ def scrape_amazon_product(url):
         # Save results to file
         if product_name:
             words = product_name.split()
-            filename = "_".join(words[:2]) + ".txt"
-            file_path = os.path.join(RESULTS_DIR, filename)
+            filename = "_".join(words[:2]) + ".txt"  # e.g., "Apple_iPhone.txt"
+            file_path = os.path.join(COMMENTS_DIR, filename)
+            summary_path = os.path.join(AI_SUMMARY_DIR, filename)
 
             formatted_text = f"Product Name: {product_name}\nStars: {star_rating}\n\n"
             if comments:
@@ -76,7 +72,10 @@ def scrape_amazon_product(url):
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(formatted_text)
 
-            print(f"✅ Product details and comments saved successfully: {file_path}")
+            print(f"✅ Comments saved successfully: {file_path}")
+
+            # 🎯 Send to AI and save summary
+            summarize_text_with_ai(file_path, summary_path)
 
         else:
             print("Error: Could not find the product title.")
@@ -87,3 +86,31 @@ def scrape_amazon_product(url):
     finally:
         driver.quit()  # Close the browser
 
+def summarize_text_with_ai(input_file, output_file):
+    """Read the scraped text file, send to AI for summarization, clean unnecessary text, and save result."""
+    try:
+        with open(input_file, "r", encoding="utf-8") as file:
+            text_content = file.read()
+
+        # 🧠 Send text to AI (DeepSeek)
+        response = ollama.chat(
+            model="deepseek-r1",
+            messages=[
+                {"role": "system", "content": "Summarize the key points from the comments."},
+                {"role": "user", "content": text_content}
+            ]
+        )
+
+        ai_summary = response["message"]["content"]
+
+        # 🧹 Remove any "<think>...</think>" sections
+        ai_summary_cleaned = re.sub(r"<think>.*?</think>", "", ai_summary, flags=re.DOTALL).strip()
+
+        # Save AI-generated summary
+        with open(output_file, "w", encoding="utf-8") as file:
+            file.write(ai_summary_cleaned)
+
+        print(f"✅ AI summary saved successfully: {output_file}")
+
+    except Exception as e:
+        print(f"Error: Failed to summarize text. {e}")
