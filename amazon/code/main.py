@@ -1,11 +1,11 @@
 from scraper import scrape_amazon_product
 
 def main():
-    url = input("Enter the Amazon product URL: ").strip()  # Take URL input from the user
+    url = input("Enter the Amazon product URL: ").strip()
     if url:
-        scrape_amazon_product(url)  # Scrape the product with the provided URL
+        scrape_amazon_product(url)
     else:
-        print("Please provide a valid Amazon URL.")
+        print("❌ Please provide a valid Amazon URL.")
 
 if __name__ == "__main__":
     main()
