@@ -1,26 +1,27 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from scraper import scrape_amazon_product
+import uvicorn
 
 app = FastAPI()
 
-class ScrapeRequest(BaseModel):
-    url: str
-
 @app.post("/scrape")
-async def scrape_amazon(request: ScrapeRequest):
-    """API endpoint to scrape Amazon product details."""
-    url = request.url
+async def scrape_amazon(request: Request):
+    """
+    API endpoint to scrape Amazon product details.
+    Expects a JSON request body with a 'url' key.
+    """
+    data = await request.json()
+    url = data.get("url")
 
     if not url:
-        raise HTTPException(status_code=400, detail="URL is required")
+        return JSONResponse(content={"error": "URL is required"}, status_code=400)
 
     try:
         scrape_amazon_product(url)
-        return {"message": "Scraping started successfully!"}
+        return JSONResponse(content={"message": "Scraping started successfully!"})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
